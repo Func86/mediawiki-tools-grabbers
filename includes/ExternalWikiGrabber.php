@@ -86,6 +86,8 @@ abstract class ExternalWikiGrabber extends Maintenance {
 
 		# Get a single DB_MASTER connection
 		$this->dbw = wfGetDB( DB_MASTER, [], $this->getOption( 'db', $wgDBname ) );
+
+		$this->actorStore = MediaWikiServices::getInstance()->getActorStore();
 	}
 
 	/**
@@ -130,6 +132,10 @@ abstract class ExternalWikiGrabber extends Maintenance {
 	 * @param string $name User name or IP address
 	 */
 	function getUserIdentity( $id, $name ) {
+		if ( empty( $name ) ) {
+			return $this->actorStore->getUnknownActor();
+		}
+
 		$q = [
 			'actor_user' => $id,
 			'actor_name' => $name,
@@ -158,9 +164,6 @@ abstract class ExternalWikiGrabber extends Maintenance {
 	 * @param string $name User name or IP address
 	 */
 	function getActorFromUser( $id, $name ) {
-		if ( $this->actorStore == null ) {
-			$this->actorStore = MediaWikiServices::getInstance()->getActorStore();
-		}
 		return $this->actorStore->acquireActorId( new UserIdentityValue( $id, $name ), $this->dbw );
 	}
 
