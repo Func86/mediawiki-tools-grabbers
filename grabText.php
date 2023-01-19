@@ -289,7 +289,6 @@ class GrabText extends TextGrabber {
 							'pr_type' => $e['type'],
 							'pr_level' => $e['level'],
 							'pr_cascade' => $e['cascade'],
-							'pr_user' => $e['user'],
 							'pr_expiry' => $e['expiry']
 						],
 						__METHOD__
