@@ -49,35 +49,35 @@ class MediaWikiBot {
 	/** Methods set by the mediawiki api
 	 */
 	protected $apimethods = array(
-		'block',
-		'compare',
-		'delete',
-		'edit',
-		'emailuser',
-		'expandtemplates',
-		'feedcontributions',
-		'feedwatchlist',
-		'filerevert',
-		'help',
-		'import',
-		'login',
-		'logout',
-		'move',
-		'opensearch',
-		'paraminfo',
-		'parse',
-		'patrol',
-		'protect',
-		'purge',
-		'query',
-		'rollback',
-		'rsd',
-		'smwinfo',
-		'unblock',
-		'undelete',
-		'upload',
-		'userrights',
-		'watch'
+		'block' => 'post',
+		'compare' => 'get',
+		'delete' => 'post',
+		'edit' => 'post',
+		'emailuser' => 'post',
+		'expandtemplates' => 'get',
+		'feedcontributions' => 'get',
+		'feedwatchlist' => 'get',
+		'filerevert' => 'post',
+		'help' => 'get',
+		'import' => 'post',
+		'login' => 'post',
+		'logout' => 'post',
+		'move' => 'post',
+		'opensearch' => 'get',
+		'paraminfo' => 'get',
+		'parse' => 'post',
+		'patrol' => 'post',
+		'protect' => 'post',
+		'purge' => 'post',
+		'query' => 'get',
+		'rollback' => 'post',
+		'rsd' => 'post',
+		'smwinfo' => 'get',
+		'unblock' => 'post',
+		'undelete' => 'post',
+		'upload' => 'post',
+		'userrights' => 'post',
+		'watch' => 'post'
 	);
 
 	/** Methods that need an xml format
@@ -143,7 +143,7 @@ class MediaWikiBot {
 			$multipart = $args[1];
 		}
 		# check for valid method
-		if ( in_array( $method, $this->apimethods ) ) {
+		if ( isset( $this->apimethods[$method] ) ) {
 			# get multipart info
 			if ( !isset( $multipart ) ) {
 				$multipart = $this->multipart( $method );
@@ -203,19 +203,27 @@ class MediaWikiBot {
 	 *  and executes a curl post request.  It then returns processed data
 	 *  based on what format has been set (default=php).
 	 */
-	private function standard_process( $method, $params = null, $multipart = false ) {
+	private function standard_process( $method, $params = [], $multipart = false ) {
 		# check for null params
-		if (  ! in_array( $method, $this->parampass ) ) {
+		if ( !in_array( $method, $this->parampass ) ) {
 			$this->check_params( $params );
 		}
-		# specify xml format if needed
+		# specify the format if needed
 		if ( in_array( $method, $this->xmlmethods ) ) {
 			$params['format'] = 'xml';
+		} elseif ( !isset( $params['format'] ) ) {
+			$params['format'] = FORMAT;
 		}
+		$format = $params['format'];
 		# build the url
-		$url = $this->api_url( $method );
+		if ( $this->apimethods[$method] === 'post' ) {
+			$url = $this->api_url( $method );
+		} else {
+			$url = $this->api_url( $method, $params );
+			$params = [];
+		}
 		# get the data
-		$data = $this->curl_post( $url, $params, $multipart );
+		$data = $this->curl_exec( $url, $this->apimethods[$method], $params, $multipart );
 		# check data for grabbers; shut up loops are confusing it's too early.
 		# Note: $data can be an empty array, resulting from api generators returning zero results
 		if ( $data === false ) {
@@ -223,28 +231,26 @@ class MediaWikiBot {
 				$seconds = $this->retryTimes[$errors];
 				echo "API error: no results; retrying in {$seconds}s\n";
 				sleep( $seconds );
-				$data = $this->curl_post( $url, $params, $multipart );
+				$data = $this->curl_exec( $url, $this->apimethods[$method], $params, $multipart );
 				if ( $data !== false ) {
 					break;
 				}
 			}
 		}
+		# unserialize
+		$data = $this->format_results( $data, $format );
 		# set smwinfo
 		$this->$method = $data;
 		# return the data
 		return $data;
 	}
 
-	/** Execute curl post
+	/** Execute curl get/post
 	 */
-	private function curl_post( $url, $params = '', $multipart = false ) {
-		# set the format if not specified
-		if ( empty( $params['format'] ) ) {
-			$params['format'] = FORMAT;
-		}
+	private function curl_exec( $url, $method = 'get', $params = [], $multipart = false ) {
 		# open the connection
 		$ch = curl_init();
-		# set the url, number of POST vars, POST data
+		# set the url, etc.
 		curl_setopt( $ch, CURLOPT_URL, $url );
 		curl_setopt( $ch, CURLOPT_USERAGENT, USERAGENT );
 		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, 1 );
@@ -252,16 +258,22 @@ class MediaWikiBot {
 		curl_setopt( $ch, CURLOPT_TIMEOUT, 30 );
 		curl_setopt( $ch, CURLOPT_COOKIEFILE, COOKIES );
 		curl_setopt( $ch, CURLOPT_COOKIEJAR, COOKIES );
-		curl_setopt( $ch, CURLOPT_POST, count( $params ) );
-		# choose multipart if necessary
-		if ( $multipart ) {
-			# submit as multipart
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, $params );
+		if ( $method === 'post' ) {
+			# set number of POST vars, POST data
+			curl_setopt( $ch, CURLOPT_POST, count( $params ) );
+			# choose multipart if necessary
+			if ( $multipart ) {
+				# submit as multipart
+				curl_setopt( $ch, CURLOPT_POSTFIELDS, $params );
+			} else {
+				# submit as normal
+				curl_setopt( $ch, CURLOPT_POSTFIELDS, $this->urlize_params( $params ) );
+			}
 		} else {
-			# submit as normal
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, $this->urlize_params( $params ) );
+			curl_setopt( $ch, CURLOPT_FOLLOWLOCATION, TRUE );
+			curl_setopt( $ch, CURLOPT_MAXREDIRS, 5 );
 		}
-		# execute the post
+		# execute the get/post
 		$results = curl_exec( $ch );
 		$error = curl_errno( $ch );
 		if ( $error !== 0 ) {
@@ -269,8 +281,8 @@ class MediaWikiBot {
 		}
 		# close the connection
 		curl_close( $ch );
-		# return the unserialized results
-		return $error !== 0 ? false : $this->format_results( $results, $params['format'] );
+		# return the results untouched
+		return $error !== 0 ? false : $results;
 	}
 
 	/** Check for multipart method
@@ -332,9 +344,9 @@ class MediaWikiBot {
 
 	/** Build the needed api url
 	 */
-	private function api_url( $function ) {
+	private function api_url( $function, $params = [] ) {
 		# return the url
-		return URL."?action={$function}&";
+		return URL . '?' . wfArrayToCgi( [ 'action' => $function ] + $params );
 	}
 
 }
