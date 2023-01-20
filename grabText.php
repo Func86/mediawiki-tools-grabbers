@@ -138,9 +138,7 @@ class GrabText extends TextGrabber {
 				$nsPageCount += $resultsCount;
 
 				# Add continuation parameters
-				if ( isset( $result['query-continue'] ) && isset( $result['query-continue']['allpages'] ) ) {
-					$params = array_merge( $params, $result['query-continue']['allpages'] );
-				} elseif ( isset( $result['continue'] ) ) {
+				if ( isset( $result['continue'] ) ) {
 					$params = array_merge( $params, $result['continue'] );
 				} else {
 					$more = false;
@@ -193,10 +191,6 @@ class GrabText extends TextGrabber {
 		if ( isset( $info_pages[0]['missing'] ) ) {
 			$this->output( "Page id $pageID not found.\n" );
 			return;
-		}
-
-		if ( !$pageID ) {
-			$pageID = $info_pages[0]['pageid'];
 		}
 
 		$page_e = [
@@ -304,9 +298,7 @@ class GrabText extends TextGrabber {
 			}
 
 			# Add continuation parameters
-			if ( isset( $result['query-continue'] ) && isset( $result['query-continue']['revisions'] ) ) {
-				$params = array_merge( $params, $result['query-continue']['revisions'] );
-			} elseif ( isset( $result['continue'] ) ) {
+			if ( isset( $result['continue'] ) ) {
 				$params = array_merge( $params, $result['continue'] );
 			} else {
 				break;
