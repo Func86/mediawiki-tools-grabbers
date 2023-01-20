@@ -18,6 +18,8 @@ require_once 'includes/TextGrabber.php';
 
 class GrabText extends TextGrabber {
 
+	private $batching;
+
 	public function __construct() {
 		parent::__construct();
 		$this->mDescription = "Grab text from an external wiki and import it into one of ours.\nDon't use this on a large wiki unless you absolutely must; it will be incredibly slow.";
@@ -79,6 +81,8 @@ class GrabText extends TextGrabber {
 			$this->output( sprintf( "Trying to resume import from page %s\n", $title ) );
 		}
 
+		$this->batching = 500 / round( $siteinfo['statistics']['edits'] / $siteinfo['statistics']['pages'] );
+
 		$pageCount = 0;
 		foreach ( $textNamespaces as $ns ) {
 			$continueTitle = null;
@@ -127,10 +131,11 @@ class GrabText extends TextGrabber {
 				$pages = $result['query']['pages'];
 
 				$resultsCount = 0;
-				foreach ( $pages as $page ) {
-					$this->processPage( $page );
-					$doneCount++;
-					if ( $doneCount % 500 === 0 ) {
+				$chunked = array_chunk( $pages, $this->batching );
+				foreach ( $chunked as $pageList ) {
+					$this->processPages( $pageList );
+					$doneCount += $this->batching;
+					if ( $doneCount % 500 <= $this->batching ) {
 						$this->output( "$doneCount\n" );
 					}
 					$resultsCount++;
@@ -154,83 +159,77 @@ class GrabText extends TextGrabber {
 	}
 
 	/**
-	 * Handle an individual page.
-	 *
-	 * @param array $page: Array retrieved from the API, containing pageid,
-	 *     page title, namespace, protection status and more...
+	 * Process a chunk of pages.
 	 */
-	function processPage( $page ) {
-		$pageID = $page['pageid'];
+	private function processPages( $pages ) {
+		$pageIds = [];
+		$info_pages = [];
+		foreach( $pages as $page ) {
+			$pageIds[] = $page['pageid'];
+			$info_pages[$page['pageid']] = $page;
+		}
+		$pageIds = implode( '|', $pageIds );
 
-		$this->output( "Processing page id $pageID...\n" );
+		$this->output( "Query revisions for page id $pageIds...\n" );
 
 		$params = [
-			'prop' => 'info|revisions',
+			'pageids' => $pageIds,
+			'prop' => 'revisions',
 			'rvlimit' => 'max',
 			'rvprop' => 'ids|flags|timestamp|user|userid|comment|content|tags|contentmodel',
 			'rvdir' => 'newer',
 			'rvend' => wfTimestamp( TS_ISO_8601, $this->endDate )
 		];
-		$params['pageids'] = $pageID;
-		if ( $page['protection'] ) {
-			$params['inprop'] = 'protection';
-		}
 
-		$result = $this->bot->query( $params );
+		$last_pageId = null;
+		$exists = [];
+		$processed = [];
+		while ( true ) {
+			$result = $this->bot->query( $params );
 
-		if ( !$result || isset( $result['error'] ) ) {
-			$this->fatalError( "Error getting revision information from API for page id $pageID." );
-			return;
-		}
+			if ( !$result || isset( $result['error'] ) ) {
+				if ( isset( $result['error'] ) ) {
+					$this->fatalError( "Error getting revision information from API: " . json_encode( $result['error'] ) . '.' );
+				}
+				else {
+					$this->fatalError( "Error getting revision information from API." );
+				}
+				return;
+			}
 
-		if ( isset( $params['inprop'] ) ) {
-			unset( $params['inprop'] );
-		}
+			$rev_pages = array_values( $result['query']['pages'] );
 
-		$info_pages = array_values( $result['query']['pages'] );
-		if ( isset( $info_pages[0]['missing'] ) ) {
-			$this->output( "Page id $pageID not found.\n" );
-			return;
-		}
+			foreach( $rev_pages as $rev_page ) {
+				$pageId = $page['pageid'];
+				if ( $last_pageId !== $pageId ) {
+					if ( $last_pageId && $processed[$last_pageId] ) {
+						$this->insertOrUpdatePage( $info_pages[$last_pageId], $exists[$last_pageId] );
+					}
+					$last_pageId = $pageId;
+					$exists[$pageId] = $this->preparePage( $info_pages[$pageId] );
+					$processed[$pageId] = false;
+				}
 
-		$page_e = [
-			'namespace' => null,
-			'title' => null,
-			'counter' => 0,
-			'is_redirect' => 0,
-			'is_new' => 0,
-			'random' => wfRandom(),
-			'touched' => wfTimestampNow(),
-			'len' => 0,
-			'content_model' => null
-		];
-		# Trim and convert displayed title to database page title
-		# Get it from the returned value from api
-		$page_e['namespace'] = $info_pages[0]['ns'];
-		$page_e['title'] = $this->sanitiseTitle( $info_pages[0]['ns'], $info_pages[0]['title'] );
+				foreach ( $rev_page['revisions'] as $revision ) {
+					$processed[$pageId] = $this->processRevision( $revision, $pageId, $title ) || $processed[$pageId];
+				}
+			}
 
-		# We kind of need this to resume...
-		$this->output( "Title: {$page_e['title']} in namespace {$page_e['namespace']}\n" );
-		$title = Title::makeTitle( $page_e['namespace'], $page_e['title'] );
-
-		# Get other information from api info
-		$page_e['is_redirect'] = ( isset( $info_pages[0]['redirect'] ) ? 1 : 0 );
-		$page_e['is_new'] = ( isset( $info_pages[0]['new'] ) ? 1 : 0 );
-		$page_e['len'] = $info_pages[0]['length'];
-		$page_e['counter'] = ( isset( $info_pages[0]['counter'] ) ? $info_pages[0]['counter'] : 0 );
-		$page_e['latest'] = $info_pages[0]['lastrevid'];
-		$defaultModel = null;
-		if ( isset( $info_pages[0]['contentmodel'] ) ) {
-			# This would be the most accurate way of getting the content model for a page.
-			# However it calls hooks and can be incredibly slow or cause errors
-			#$defaultModel = ContentHandler::getDefaultModelFor( $title );
-			$defaultModel = MediaWikiServices::getInstance()->getNamespaceInfo()->
-				getNamespaceContentModel( $info_pages[0]['ns'] ) || CONTENT_MODEL_WIKITEXT;
-			# Set only if not the default content model
-			if ( $defaultModel != $info_pages[0]['contentmodel'] ) {
-				$page_e['content_model'] = $info_pages[0]['contentmodel'];
+			# Add continuation parameters
+			if ( isset( $result['continue'] ) ) {
+				$params = array_merge( $params, $result['continue'] );
+			} else {
+				break;
 			}
 		}
+		if ( $last_pageId && $processed[$last_pageId] ) {
+			$this->insertOrUpdatePage( $info_pages[$last_pageId], $exists[$last_pageId] );
+		}
+		$this->dbw->commit();
+	}
+
+	private function preparePage( $info_page ) {
+		$pageID = $info_page['pageid'];
 
 		# Check if page is present
 		$pageIsPresent = false;
@@ -248,15 +247,15 @@ class GrabText extends TextGrabber {
 		# a duplicate title. That would mean the page was moved leaving a redirect but
 		# we haven't processed the move yet
 		if ( !$pageIsPresent ) {
-			$conflictingPageID = $this->getPageID( $page_e['namespace'], $page_e['title'] );
+			$conflictingPageID = $this->getPageID( $info_page['namespace'], $info_page['title'] );
 			if ( $conflictingPageID ) {
 				# Whoops...
-				$this->resolveConflictingTitle( $conflictingPageID, $page_e['namespace'], $page_e['title'] );
+				$this->resolveConflictingTitle( $conflictingPageID, $info_page['namespace'], $info_page['title'] );
 			}
 		}
 
 		# Update page_restrictions (only if requested)
-		if ( isset( $info_pages[0]['protection'] ) ) {
+		if ( isset( $info_page['protection'] ) ) {
 			$this->output( "Setting page_restrictions on page_id $pageID.\n" );
 			# Delete first any existing protection
 			$this->dbw->delete(
@@ -265,7 +264,7 @@ class GrabText extends TextGrabber {
 				__METHOD__
 			);
 			# insert current restrictions
-			foreach ( $info_pages[0]['protection'] as $prot ) {
+			foreach ( $info_page['protection'] as $prot ) {
 				# Skip protections inherited from cascade protections
 				if ( !isset( $prot['source'] ) ) {
 					$e = [
@@ -273,7 +272,6 @@ class GrabText extends TextGrabber {
 						'type' => $prot['type'],
 						'level' => $prot['level'],
 						'cascade' => (int)isset( $prot['cascade'] ),
-						'user' => null,
 						'expiry' => ( $prot['expiry'] == 'infinity' ? 'infinity' : wfTimestamp( TS_MW, $prot['expiry'] ) )
 					];
 					$this->dbw->insert(
@@ -291,31 +289,39 @@ class GrabText extends TextGrabber {
 			}
 		}
 
-		$revisionsProcessed = false;
-		while ( true ) {
-			foreach ( $info_pages[0]['revisions'] as $revision ) {
-				$revisionsProcessed = $this->processRevision( $revision, $pageID, $title ) || $revisionsProcessed;
+		return $pageIsPresent;
+	}
+
+	private function insertOrUpdatePage( $page_e, $pageIsPresent ) {
+		# Trim and convert displayed title to database page title
+		$page_e = [
+			'namespace' =>  $info_page['ns'],
+			'title' => $this->sanitiseTitle( $info_page['ns'], $info_page['title'] ),
+			'counter' => ( isset( $info_page['counter'] ) ? $info_page['counter'] : 0 ),
+			'is_redirect' => ( isset( $info_page['redirect'] ) ? 1 : 0 ),
+			'is_new' => ( isset( $info_page['new'] ) ? 1 : 0 ),
+			'random' => wfRandom(),
+			'touched' => wfTimestampNow(),
+			'len' => $info_page['length'],
+			'latest' => $info_page['lastrevid'],
+			'content_model' => null
+		];
+
+		# We kind of need this to resume...
+		$this->output( "Title: {$page_e['title']} in namespace {$page_e['namespace']}\n" );
+		$title = Title::makeTitle( $page_e['namespace'], $page_e['title'] );
+
+		$defaultModel = null;
+		if ( isset( $info_page['contentmodel'] ) ) {
+			# This would be the most accurate way of getting the content model for a page.
+			# However it calls hooks and can be incredibly slow or cause errors
+			#$defaultModel = ContentHandler::getDefaultModelFor( $title );
+			$defaultModel = MediaWikiServices::getInstance()->getNamespaceInfo()->
+				getNamespaceContentModel( $info_page['ns'] ) || CONTENT_MODEL_WIKITEXT;
+			# Set only if not the default content model
+			if ( $defaultModel != $info_page['contentmodel'] ) {
+				$page_e['content_model'] = $info_page['contentmodel'];
 			}
-
-			# Add continuation parameters
-			if ( isset( $result['continue'] ) ) {
-				$params = array_merge( $params, $result['continue'] );
-			} else {
-				break;
-			}
-
-			$result = $this->bot->query( $params );
-			if ( !$result || isset( $result['error'] ) ) {
-				$this->fatalError( "Error getting revision information from API for page id $pageID." );
-				return;
-			}
-
-			$info_pages = array_values( $result['query']['pages'] );
-		}
-
-		if ( !$revisionsProcessed ) {
-			# We already processed the page before? page doesn't need updating, then
-			return;
 		}
 
 		$insert_fields = [
@@ -351,7 +357,6 @@ class GrabText extends TextGrabber {
 				__METHOD__
 			);
 		}
-		$this->dbw->commit();
 	}
 }
 
