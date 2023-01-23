@@ -33,9 +33,8 @@ abstract class ExternalWikiGrabber extends Maintenance {
 	 */
 	protected $bot;
 
-
-	/*
-	 * ActorStore instance
+	/**
+	 * @var ActorStore
 	 */
 	private $actorStore;
 
