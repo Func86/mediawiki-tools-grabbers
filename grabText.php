@@ -172,19 +172,12 @@ class GrabText extends TextGrabber {
 			'rvend' => wfTimestamp( TS_ISO_8601, $this->endDate )
 		];
 		$params['pageids'] = $pageID;
-		if ( $page['protection'] ) {
-			$params['inprop'] = 'protection';
-		}
 
 		$result = $this->bot->query( $params );
 
 		if ( !$result || isset( $result['error'] ) ) {
 			$this->fatalError( "Error getting revision information from API for page id $pageID." );
 			return;
-		}
-
-		if ( isset( $params['inprop'] ) ) {
-			unset( $params['inprop'] );
 		}
 
 		$info_pages = array_values( $result['query']['pages'] );
@@ -256,7 +249,7 @@ class GrabText extends TextGrabber {
 		}
 
 		# Update page_restrictions (only if requested)
-		if ( isset( $info_pages[0]['protection'] ) ) {
+		if ( isset( $page['protection'] ) ) {
 			$this->output( "Setting page_restrictions on page_id $pageID.\n" );
 			# Delete first any existing protection
 			$this->dbw->delete(
@@ -265,24 +258,18 @@ class GrabText extends TextGrabber {
 				__METHOD__
 			);
 			# insert current restrictions
-			foreach ( $info_pages[0]['protection'] as $prot ) {
+			foreach ( $page['protection'] as $prot ) {
 				# Skip protections inherited from cascade protections
 				if ( !isset( $prot['source'] ) ) {
-					$e = [
-						'page' => $pageID,
-						'type' => $prot['type'],
-						'level' => $prot['level'],
-						'cascade' => (int)isset( $prot['cascade'] ),
-						'expiry' => ( $prot['expiry'] == 'infinity' ? 'infinity' : wfTimestamp( TS_MW, $prot['expiry'] ) )
-					];
+					$expiry = $prot['expiry'] == 'infinity' ? 'infinity' : wfTimestamp( TS_MW, $prot['expiry'] );
 					$this->dbw->insert(
 						'page_restrictions',
 						[
-							'pr_page' => $e['page'],
-							'pr_type' => $e['type'],
-							'pr_level' => $e['level'],
-							'pr_cascade' => $e['cascade'],
-							'pr_expiry' => $e['expiry']
+							'pr_page' => $pageID,
+							'pr_type' => $prot['type'],
+							'pr_level' => $prot['level'],
+							'pr_cascade' => (int)isset( $prot['cascade'] ),
+							'pr_expiry' => $expiry
 						],
 						__METHOD__
 					);
