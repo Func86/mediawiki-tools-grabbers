@@ -493,6 +493,7 @@ class WikiImportHandler {
 
 		$normalFields = [ 'id', 'parentid', 'timestamp', 'comment', 'minor', 'origin',
 			'model', 'format', 'text', 'sha1' ];
+		$fieldsWithDeleted = [ 'contributor', 'comment', 'text' ];
 
 		$skip = false;
 
@@ -503,6 +504,10 @@ class WikiImportHandler {
 			}
 
 			$tag = $this->reader->localName;
+
+			if ( in_array( $tag, $fieldsWithDeleted ) ) {
+				$revisionInfo['deleted'][$tag] = $this->nodeAttribute( 'deleted' ) === 'deleted';
+			}
 
 			if ( in_array( $tag, $normalFields ) ) {
 				$revisionInfo[$tag] = $this->nodeContents();

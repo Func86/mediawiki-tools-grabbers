@@ -234,7 +234,7 @@ TEXT
 		$revision = [
 			'revid' => $revisionInfo['id'],
 			'parentid' => $revisionInfo['parentid'] ?? 0,
-			'minor' => isset( $revisionInfo['minor'] ),
+			'minor' => $revisionInfo['minor'] ?? null,
 			'user' => $userName,
 			'userid' => $user['id'] ?? 0,
 			'timestamp' => $revisionInfo['timestamp'],
@@ -243,13 +243,10 @@ TEXT
 			'contentformat' => $revisionInfo['format'] ?? null,
 			'*' => $revisionInfo['text'],
 			'comment' => $revisionInfo['comment'] ?? '',
+			'texthidden' => $revisionInfo['deleted']['text'] ?: null,
+			'userhidden' => $revisionInfo['deleted']['contributor'] ?: null,
+			'commenthidden' => $revisionInfo['deleted']['comment'] ?: null,
 		];
-		if ( empty( $userName ) ) {
-			$revision['userhidden'] = true;
-		}
-		if ( !isset( $revisionInfo['comment'] ) ) {
-			$revision['commenthidden'] = true;
-		}
 
 		return $this->processRevision( $revision, $pageInfo['id'],
 			new PageIdentityValue( $pageInfo['id'], $pageInfo['ns'], $pageInfo['title'], PageIdentityValue::LOCAL )
