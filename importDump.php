@@ -72,7 +72,6 @@ TEXT
 		if ( MediaWikiServices::getInstance()->getReadOnlyMode()->isReadOnly() ) {
 			$this->fatalError( "Wiki is in read-only mode; you'll need to disable it for import to work." );
 		}
-		$this->setOption( 'url', 'unused' );
 		parent::execute();
 
 		$this->reportingInterval = intval( $this->getOption( 'report', 100 ) );
