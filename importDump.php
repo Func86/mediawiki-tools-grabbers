@@ -305,6 +305,14 @@ TEXT
 			if ( $conflictingPageID ) {
 				# Whoops...
 				$this->resolveConflictingTitle( $page_e['namespace'], $page_e['title'], $pageID, $conflictingPageID );
+				# The conflicting page can be deleted, e.g. moving over a redirect page.
+				$pageLatest = $this->dbw->selectField(
+					'page',
+					'page_latest',
+					[ 'page_id' => $pageID ],
+					__METHOD__
+				);
+				$pageIsPresent = $pageLatest !== false;
 			}
 		}
 
