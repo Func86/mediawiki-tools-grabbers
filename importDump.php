@@ -283,21 +283,24 @@ TEXT
 
 		# Check if page is present
 		$pageIsPresent = false;
-		$pageLatest = $this->dbw->selectRow(
+		$pageRow = $this->dbw->selectRow(
 			'page',
-			'page_latest',
+			[ 'page_latest', 'page_namespace', 'page_title' ],
 			[ 'page_id' => $pageID ],
 			__METHOD__
 		);
-		if ( $pageLatest ) {
-			$pageLatest = $pageLatest->page_latest;
+		if ( $pageRow ) {
+			$pageLatest = $pageRow->page_latest;
 			$pageIsPresent = true;
 		}
 
 		# If page is not present, check if title is present, because we can't insert
 		# a duplicate title. That would mean the page was moved leaving a redirect but
 		# we haven't processed the move yet
-		if ( !$pageIsPresent ) {
+		if ( !$pageIsPresent ||
+			$pageRow->page_namespace != $page_e['namespace'] ||
+			$pageRow->page_title != $page_e['title']
+		) {
 			$conflictingPageID = $this->getPageID( $page_e['namespace'], $page_e['title'] );
 			if ( $conflictingPageID ) {
 				# Whoops...
