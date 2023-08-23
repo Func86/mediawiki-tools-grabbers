@@ -189,36 +189,30 @@ class GrabText extends TextGrabber {
 		}
 
 		$page_e = [
-			'namespace' => null,
-			'title' => null,
-			'is_redirect' => 0,
-			'is_new' => 0,
+			'namespace' => $info_pages[0]['ns'],
+			# Trim and convert displayed title to database page title
+			'title' => $this->sanitiseTitle( $info_pages[0]['ns'], $info_pages[0]['title'] ),
+			'is_redirect' => isset( $info_pages[0]['redirect'] ) ? 1 : 0,
+			'is_new' => isset( $info_pages[0]['new'] ) ? 1 : 0,
 			'random' => wfRandom(),
 			'touched' => wfTimestampNow(),
-			'len' => 0,
-			'content_model' => null
+			'len' => $info_pages[0]['length'],
+			'content_model' => null,
+			'latest' => $info_pages[0]['lastrevid'],
 		];
-		# Trim and convert displayed title to database page title
-		# Get it from the returned value from api
-		$page_e['namespace'] = $info_pages[0]['ns'];
-		$page_e['title'] = $this->sanitiseTitle( $info_pages[0]['ns'], $info_pages[0]['title'] );
 
 		# We kind of need this to resume...
 		$this->output( "Title: {$page_e['title']} in namespace {$page_e['namespace']}\n" );
 		$title = Title::makeTitle( $page_e['namespace'], $page_e['title'] );
 
 		# Get other information from api info
-		$page_e['is_redirect'] = ( isset( $info_pages[0]['redirect'] ) ? 1 : 0 );
-		$page_e['is_new'] = ( isset( $info_pages[0]['new'] ) ? 1 : 0 );
-		$page_e['len'] = $info_pages[0]['length'];
-		$page_e['latest'] = $info_pages[0]['lastrevid'];
 		$defaultModel = null;
 		if ( isset( $info_pages[0]['contentmodel'] ) ) {
 			# This would be the most accurate way of getting the content model for a page.
 			# However it calls hooks and can be incredibly slow or cause errors
 			#$defaultModel = ContentHandler::getDefaultModelFor( $title );
-			$defaultModel = MediaWikiServices::getInstance()->getNamespaceInfo()->
-				getNamespaceContentModel( $info_pages[0]['ns'] ) || CONTENT_MODEL_WIKITEXT;
+			$defaultModel = MediaWikiServices::getInstance()->getNamespaceInfo()
+				->getNamespaceContentModel( $info_pages[0]['ns'] ) || CONTENT_MODEL_WIKITEXT;
 			# Set only if not the default content model
 			if ( $defaultModel != $info_pages[0]['contentmodel'] ) {
 				$page_e['content_model'] = $info_pages[0]['contentmodel'];
