@@ -247,9 +247,11 @@ TEXT
 			'commenthidden' => $revisionInfo['deleted']['comment'] ?: null,
 		];
 
-		return $this->processRevision( $revision, $pageInfo['id'],
-			new PageIdentityValue( $pageInfo['id'], $pageInfo['ns'], $pageInfo['title'], PageIdentityValue::LOCAL )
+		$pageIdent = PageIdentityValue::localIdentity(
+			$pageInfo['id'], $pageInfo['ns'],
+			$this->sanitiseTitle( $pageInfo['ns'], $pageInfo['title'] )
 		);
+		return $this->processRevision( $revision, $pageInfo['id'], $pageIdent );
 	}
 
 	public function handlePageOut( array $pageInfo, array $revisionInfo ) {
