@@ -98,6 +98,58 @@ TEXT
 		$this->output( "and initSiteStats.php to update page and revision counts\n" );
 	}
 
+	private function importFromFile( $filename ) {
+		if ( preg_match( '/\.gz$/', $filename ) ) {
+			$filename = 'compress.zlib://' . $filename;
+		} elseif ( preg_match( '/\.bz2$/', $filename ) ) {
+			$filename = 'compress.bzip2://' . $filename;
+		} elseif ( preg_match( '/\.7z$/', $filename ) ) {
+			$filename = 'mediawiki.compress.7z://' . $filename;
+		}
+
+		$file = fopen( $filename, 'rt' );
+		if ( $file === false ) {
+			$this->fatalError( error_get_last()['message'] ?? 'Could not open file' );
+		}
+
+		return $this->importFromHandle( $file );
+	}
+
+	private function importFromStdin() {
+		$file = fopen( 'php://stdin', 'rt' );
+		if ( self::posix_isatty( $file ) ) {
+			$this->maybeHelp( true );
+		}
+
+		return $this->importFromHandle( $file );
+	}
+
+	private function importFromHandle( $handle ) {
+		$this->startTime = microtime( true );
+
+		$source = new ImportStreamSource( $handle );
+		$importer = new WikiImportHandler( $source );
+
+		if ( $this->hasOption( 'debug' ) ) {
+			$importer->setDebug( true );
+		}
+		if ( $this->hasOption( 'skip-to' ) ) {
+			$nthPage = (int)$this->getOption( 'skip-to' );
+			$importer->setPageOffset( $nthPage );
+			$this->pageCount = $nthPage - 1;
+		}
+		$importer->setPageCallback( [ $this, 'handlePage' ] );
+		$importer->setNoticeCallback( static function ( $msg, $params ) {
+			echo wfMessage( $msg, $params )->text() . "\n";
+		} );
+		$this->importCallback = $importer->setRevisionCallback(
+			[ $this, 'handleRevision' ] );
+		$this->importCallback = $importer->setPageOutCallback(
+			[ $this, 'handlePageOut' ] );
+
+		return $importer->doImport();
+	}
+
 	private function setNsfilter( array $namespaces ) {
 		if ( count( $namespaces ) == 0 ) {
 			$this->nsFilter = false;
@@ -164,58 +216,6 @@ TEXT
 
 	private function progress( $string ) {
 		fwrite( $this->stderr, $string . "\n" );
-	}
-
-	private function importFromFile( $filename ) {
-		if ( preg_match( '/\.gz$/', $filename ) ) {
-			$filename = 'compress.zlib://' . $filename;
-		} elseif ( preg_match( '/\.bz2$/', $filename ) ) {
-			$filename = 'compress.bzip2://' . $filename;
-		} elseif ( preg_match( '/\.7z$/', $filename ) ) {
-			$filename = 'mediawiki.compress.7z://' . $filename;
-		}
-
-		$file = fopen( $filename, 'rt' );
-		if ( $file === false ) {
-			$this->fatalError( error_get_last()['message'] ?? 'Could not open file' );
-		}
-
-		return $this->importFromHandle( $file );
-	}
-
-	private function importFromStdin() {
-		$file = fopen( 'php://stdin', 'rt' );
-		if ( self::posix_isatty( $file ) ) {
-			$this->maybeHelp( true );
-		}
-
-		return $this->importFromHandle( $file );
-	}
-
-	private function importFromHandle( $handle ) {
-		$this->startTime = microtime( true );
-
-		$source = new ImportStreamSource( $handle );
-		$importer = new WikiImportHandler( $source );
-
-		if ( $this->hasOption( 'debug' ) ) {
-			$importer->setDebug( true );
-		}
-		if ( $this->hasOption( 'skip-to' ) ) {
-			$nthPage = (int)$this->getOption( 'skip-to' );
-			$importer->setPageOffset( $nthPage );
-			$this->pageCount = $nthPage - 1;
-		}
-		$importer->setPageCallback( [ $this, 'handlePage' ] );
-		$importer->setNoticeCallback( static function ( $msg, $params ) {
-			echo wfMessage( $msg, $params )->text() . "\n";
-		} );
-		$this->importCallback = $importer->setRevisionCallback(
-			[ $this, 'handleRevision' ] );
-		$this->importCallback = $importer->setPageOutCallback(
-			[ $this, 'handlePageOut' ] );
-
-		return $importer->doImport();
 	}
 
 	public function handleRevision( array $pageInfo, array $revisionInfo ) {
