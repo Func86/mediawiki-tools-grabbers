@@ -242,9 +242,9 @@ TEXT
 			'contentformat' => $revisionInfo['format'] ?? null,
 			'*' => $revisionInfo['text'],
 			'comment' => $revisionInfo['comment'] ?? '',
-			'texthidden' => $revisionInfo['deleted']['text'] ?: null,
-			'userhidden' => $revisionInfo['deleted']['contributor'] ?: null,
-			'commenthidden' => $revisionInfo['deleted']['comment'] ?: null,
+			'texthidden' => ( $revisionInfo['deleted']['text'] ?? false ) ?: null,
+			'userhidden' => ( $revisionInfo['deleted']['contributor'] ?? false ) ?: null,
+			'commenthidden' => ( $revisionInfo['deleted']['comment'] ?? false ) ?: null,
 		];
 
 		$pageIdent = PageIdentityValue::localIdentity(
