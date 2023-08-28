@@ -27,6 +27,8 @@ class ImportDump extends TextGrabber {
 	/** @var float */
 	protected $startTime;
 
+	protected $skipToRevId = null;
+
 	public function __construct() {
 		parent::__construct();
 		$gz = in_array( 'compress.zlib', stream_get_wrappers() )
@@ -60,6 +62,7 @@ TEXT
 		$this->addOption( 'dry-run', 'Parse dump without actually importing pages' );
 		$this->addOption( 'debug', 'Output extra verbose debug information' );
 		$this->addOption( 'skip-to', 'Start from nth page by skipping first n-1 pages', false, true );
+		$this->addOption( 'skip-to-revid', 'Start from the given revision ID by skipping previous ones', false, true );
 		$this->addArg( 'file', 'Dump file to import [else use stdin]', false );
 	}
 
@@ -85,6 +88,9 @@ TEXT
 
 		if ( $this->hasOption( 'namespaces' ) ) {
 			$this->setNsfilter( explode( '|', $this->getOption( 'namespaces' ) ) );
+		}
+		if ( $this->hasOption( 'skip-to-revid' ) ) {
+			$this->skipToRevId = $this->getOption( 'skip-to-revid' );
 		}
 
 		if ( $this->hasArg( 0 ) ) {
@@ -222,7 +228,11 @@ TEXT
 		$this->revCount++;
 		$this->report();
 
-		if ( !$this->dryRun ) {
+		if ( $this->skipToRevId ) {
+			if ( $revisionInfo['id'] == $this->skipToRevId ) {
+				$this->skipToRevId = null;
+			}
+		} elseif ( !$this->dryRun ) {
 			return $this->insertRevision( $pageInfo, $revisionInfo );
 		}
 	}
