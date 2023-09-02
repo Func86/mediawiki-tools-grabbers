@@ -317,7 +317,9 @@ TEXT
 			if ( $conflictingPageID ) {
 				# Whoops...
 				$this->resolveConflictingTitle( $page_e['namespace'], $page_e['title'], $pageID, $conflictingPageID );
-				# The conflicting page can be deleted, e.g. moving over a redirect page.
+				# The conflicting page can be deleted because we are working on a XML dump.
+				# The page would be created unintentionally again, but we will eventually
+				# reach the synced state.
 				$pageLatest = $this->dbw->selectField(
 					'page',
 					'page_latest',
