@@ -42,6 +42,7 @@ class GrabLogs extends ExternalWikiGrabber {
 		$this->addOption( 'end', 'Log time at which to stop (20121222142317, 2012-12-22T14:23:17Z, etc)', false, true );
 		$this->addOption( 'apilimits', 'API limits to use. Maximum limits for the user will be used by default', false, true );
 		$this->addOption( 'logtypes', 'Process only logs of those types (pipe separated list). All logs will be processed by default', false, true );
+		$this->addOption( 'leaction', 'The leaction param for API.', false, true );
 		$this->addOption( 'resume', 'Set the `start` param from the last log entry grabbed.' );
 	}
 
@@ -101,6 +102,10 @@ class GrabLogs extends ExternalWikiGrabber {
 			}
 			$params['leend'] = $leend;
 		}
+		if ( $this->hasOption( 'leaction' ) ) {
+			$params['leaction'] = $this->getOption( 'leaction' );
+		}
+
 		$more = true;
 		$i = 0;
 
