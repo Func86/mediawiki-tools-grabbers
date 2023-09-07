@@ -349,7 +349,7 @@ TEXT
 				$insert_fields,
 				__METHOD__
 			);
-		} elseif ( (int)$pageLatest < (int)$revisionInfo['id'] ) {
+		} else {
 			# update existing
 			$this->output( "Updating page entry $pageID\n" );
 			$this->dbw->update(
