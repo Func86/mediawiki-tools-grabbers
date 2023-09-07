@@ -8,7 +8,7 @@ use MediaWiki\Page\PageIdentityValue;
 use MediaWiki\Settings\SettingsBuilder;
 
 require_once 'includes/TextGrabber.php';
-require_once 'includes/WikiImporter.php';
+require_once 'includes/WikiImportHandler.php';
 
 class ImportDump extends TextGrabber {
 
