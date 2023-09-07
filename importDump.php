@@ -270,9 +270,6 @@ TEXT
 			'namespace' => $pageInfo['ns'],
 			'title' => $this->sanitiseTitle( $pageInfo['ns'], $pageInfo['title'] ),
 			'is_redirect' => ( isset( $pageInfo['redirect'] ) ? 1 : 0 ),
-			'is_new' => 0,
-			'random' => wfRandom(),
-			'touched' => wfTimestampNow(),
 			'len' => strlen( $revisionInfo['text'] ),
 			'latest' => $revisionInfo['id'],
 			'content_model' => null
@@ -334,9 +331,8 @@ TEXT
 			'page_namespace' => $page_e['namespace'],
 			'page_title' => $page_e['title'],
 			'page_is_redirect' => $page_e['is_redirect'],
-			'page_is_new' => $page_e['is_new'],
-			'page_random' => $page_e['random'],
-			'page_touched' => $page_e['touched'],
+			'page_is_new' => 0,
+			'page_touched' => wfTimestampNow(),
 			'page_latest' => $page_e['latest'],
 			'page_len' => $page_e['len'],
 			'page_content_model' => $page_e['content_model']
@@ -344,7 +340,10 @@ TEXT
 		if ( !$pageIsPresent ) {
 			# insert if not present
 			$this->output( "Inserting page entry $pageID\n" );
-			$insert_fields['page_id'] = $pageID;
+			$insert_fields += [
+				'page_id' => $pageID,
+				'page_random' => wfRandom(),
+			];
 			$this->dbw->insert(
 				'page',
 				$insert_fields,
