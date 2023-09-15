@@ -358,8 +358,6 @@ TEXT
 				[ 'page_id' => $pageID ],
 				__METHOD__
 			);
-		} else {
-			// $this->output( "No need to update page entry for $pageID\n" );
 		}
 	}
 }
